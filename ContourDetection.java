@@ -23,13 +23,16 @@ public class ContourDetection extends OpenCvPipeline {
     //Scalars
     public static Scalar lower = new Scalar(0, 0, 0);
     public static Scalar upper = new Scalar(255, 255, 255);
-    private final Scalar color = new Scalar(0, 0, 255);    
+    private final Scalar color = new Scalar(255, 0, 255);
+
+    private static List<Mat> channels = new ArrayList<>();
     
     //Mats
     private Mat kernel;
     private Mat grayMat = new Mat();
     private Mat hsvMat = new Mat();
     private Mat thresholdMat = new Mat();
+    private Mat thresholdGrayMat = new Mat();
     private Mat maskMat = new Mat();
 
     private Telemetry t;
@@ -61,6 +64,12 @@ public class ContourDetection extends OpenCvPipeline {
 
 
         //Finding contours of the thresholded Mat
+        Core.split(thresholdMat, channels);
+        thresholdGrayMat = channels.get(2);
+
+        contourBinary = new Mat(thresholdMat.rows(), thresholdMat.cols(), thresholdMat.type(), new Scalar(0));
+        Imgproc.threshold(thresholdGrayMat, contourBinary, binaryLower, binaryHigher, Imgproc.THRESH_BINARY_INV);
+        
         List<MatOfPoint> thresholdContours = new ArrayList<>();
         Mat thresholdHierarchy = new Mat();
         Imgproc.findContours(contourBinary, thresholdContours, thresholdHierarchy, Imgproc.RETR_TREE, Imgproc.CHAIN_APPROX_SIMPLE);
@@ -69,13 +78,13 @@ public class ContourDetection extends OpenCvPipeline {
         
         switch(channelSwitch) {
             case 1:
-            default:
                 return input;
             case 2:
                 return grayMat;
             case 3:
                 return hsvMat;
             case 4:
+            default:
                 return thresholdMat;
         }
     }
