@@ -55,65 +55,69 @@ public class ContourDetection extends OpenCvPipeline {
     @Override
     public Mat processFrame(Mat input) {
         /*
-         * The general structure of this pipeline:
-         * 1. Apply morphology to the input image. This tunes out some of the "noise" of the image that makes it easier to detect contours and edges.
-         * 2. Apply the threshold from EOCV-Sim variable tuners to the HSV image.
-         * 3. Convert the input image to grayscale and store it in grayMat. This is so that the contour detector can accurately detect contours
-         * 4. Convert the input image to binary.
-         * 5. Create an ArrayList to store each of the contours. Contours are each stored in a MatOfPoint, and all contours in an image are stored in that ArrayList.
-         * 6. Find the contours from the binary Mats, and draw them on the grayMat and the hsvMat (for consistency across the different Mats). These contours are of the entire
-         *    image, not only the thresholded images.
-         * 7. Convert the thresholded HSV Mat to grayscale by extracting the thresholded Mat into three Mats and accessing the V mat. This works because the V channel of the HSV
-         *    colorspace is already grayscale, so only showing the values of V is the equivalent of converting the whole Mat from RGB to grayscale.
-         * 8. Convert the thresholded image to binary.
-         * 9. Create an ArrayList to store the contours.
-         * 10. Find and draw all of the contours on the thresholdMat_AllContours, and only the largest area contour on thresholdMat_MaxContours
-         * 11. Change which Mat is returned to the viewport based on EOCV-Sim variable tuners
+         * 
          */
         
-        // 1. Morphology
+        // 1. Apply morphology
         kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3, 3));
         Imgproc.morphologyEx(input, input, Imgproc.MORPH_CLOSE, kernel);
 
-        // 2. Threshold HSV
+        // 2. Apply the threshold to the HSV mat
         thresholdHSV(input);
 
-        // 3. Convert to grayscale
+        // 3. Convert the input Mat to grayscale
         Imgproc.cvtColor(input, grayMat, Imgproc.COLOR_RGB2GRAY);
         
-        // 4. Convert to binary
+        // 4. Conver the input Mat to binary
         Mat contourBinary = new Mat(input.rows(), input.cols(), input.type(), new Scalar(0));
         Imgproc.threshold(grayMat, contourBinary, binaryLower, binaryHigher, Imgproc.THRESH_BINARY_INV);
         
-        // 5. ArrayList storing contours
+        // 5. Create an ArrayList storing all of the contours in the binary input Mat
         List<MatOfPoint> contours = new ArrayList<>();
         Mat hierarchy = new Mat();
         
-        // 6. Finding/drawing contours
+        // 6. Finding/drawing contours on both the grayscale and HSV Mats
         Imgproc.findContours(contourBinary, contours, hierarchy, Imgproc.RETR_TREE, Imgproc.CHAIN_APPROX_SIMPLE);
         Imgproc.drawContours(grayMat, contours, -1, color, 2, Imgproc.LINE_8, hierarchy, 2, new Point());
         Imgproc.drawContours(hsvMat, contours, -1, color, 2, Imgproc.LINE_8, hierarchy, 2, new Point());
 
 
-        // 7. Extract the V channel
-        Core.split(thresholdMat_AllContours, channels);
-        thresholdGrayMat = channels.get(2);
 
-        //8. Convert to binary
+        // 7. Extract the V channel from the thresholded HSV Mat
+        Core.split(thresholdMat_AllContours, channels); //At this point, thresholdMat_AllContours has no contours drawn on it, it's just the thresholded HSV Mat
+        thresholdGrayMat = channels.get(2); //Thresholded grayscale Mat
+
+        //8. Convert the thresholded HSV mat to binary
         contourBinary = new Mat(thresholdMat_AllContours.rows(), thresholdMat_AllContours.cols(), thresholdMat_AllContours.type(), new Scalar(0));
         Imgproc.threshold(thresholdGrayMat, contourBinary, binaryLower, binaryHigher, Imgproc.THRESH_BINARY_INV);
         
-        //9. ArrayList storing contours
+        //9. Create another ArrayList storing the contours detected in the thresholded Mat
         List<MatOfPoint> thresholdContours = new ArrayList<>();
         Mat thresholdHierarchy = new Mat();
 
-        //10. Finding/drawing contours
+        //10. Find and store contours detected in thresholded Mat
         Imgproc.findContours(contourBinary, thresholdContours, thresholdHierarchy, Imgproc.RETR_TREE, Imgproc.CHAIN_APPROX_SIMPLE);
         
-        
+        //11. Make the MaxContours and BoundingRects Mats match the AllContours Mat
         thresholdMat_MaxContours = thresholdMat_AllContours.clone();
         thresholdMat_BoundingRects = thresholdMat_AllContours.clone();
         
+        //12. For loop identifying the contour of the greatest area
+        for(int i = 0; i < thresholdContours.size(); i++) { //Can't be a foreach loop since foreach elements are immutable
+            MatOfPoint contour = thresholdContours.get(i);
+            area = Imgproc.contourArea(contour);
+            if (area > maxArea) {
+                maxArea = area;
+                maxIndex = i;
+            }
+        }
+
+        //13. Resets the value of the maxArea and removes the contour of largest area. By default, the largest contour will be the border of the image, so by removing it from the
+        //contours ArrayList this allows us to focus on the other contours inside the image.
+        maxArea = 0;
+        thresholdContours.remove(maxIndex);
+
+        //14. Identifies the new largest contour inside the Mat and draws BoundedRects (as a series of 4 lines) on the BoundedRects Mat
         for(int i = 0; i < thresholdContours.size(); i++) {
             MatOfPoint contour = thresholdContours.get(i);
             area = Imgproc.contourArea(contour);
@@ -133,13 +137,14 @@ public class ContourDetection extends OpenCvPipeline {
             temp.release();
         }
 
+        //15. Draws contours on the AllContours and MaxContours Mat
         Imgproc.drawContours(thresholdMat_AllContours, thresholdContours, -1, color, 2);
         Imgproc.drawContours(thresholdMat_MaxContours, thresholdContours, maxIndex, color, 2);
 
         t.addData("Maximum contour area: ", maxArea);
         t.update();
 
-        //11. Return processed Mats
+        //16. Return processed Mats. All unreturned Mats are released to keep memory clean.
         switch(channelSwitch) {
             case 1:
                 kernel.release();
