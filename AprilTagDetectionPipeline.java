@@ -36,6 +36,8 @@ import org.openftc.easyopencv.OpenCvPipeline;
 
 import java.util.ArrayList;
 
+package org.firstinspires.ftc.teamcode;
+
 public class AprilTagDetectionPipeline extends OpenCvPipeline
 {
     // STATIC CONSTANTS
